@@ -1,3 +1,5 @@
+[English](README.en.md) | 繁體中文
+
 # Steam Family library exporter
 
 匯出 Steam Family 遊戲庫及你本人的遊玩紀錄，產生 CSV 和 JSON。支援 Python 3.12+，不需要安裝 Steam Client。
