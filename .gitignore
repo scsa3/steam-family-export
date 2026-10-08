@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+.env
+.env.*
+*.token
+*.log
+data/
+steam_family_library.csv
+steam_family_library.json
+dist/
+*.egg-info/
+.idea/

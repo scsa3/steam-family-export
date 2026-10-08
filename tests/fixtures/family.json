@@ -1,0 +1,27 @@
+{
+  "my_steamid": "76561198000000001",
+  "group": {"response": {"family_groupid": "123456", "family_group": {"members": [{"steamid": "76561198000000001"}, {"steamid": "76561198000000002"}, {"steamid": "76561198000000003"}]}}},
+  "library": {"response": {"owner_steamid": "76561198000000001", "apps": [
+    {"appid": 10, "name": "My Game", "owner_steamids": ["76561198000000001"], "app_type": 1, "exclude_reason": 0},
+    {"appid": 20, "name": "Game X", "owner_steamids": ["76561198000000002"], "app_type": 1, "exclude_reason": 0, "rt_playtime": 999999},
+    {"appid": 30, "name": "Never Played", "owner_steamids": ["76561198000000002"], "app_type": 1, "exclude_reason": 0},
+    {"appid": 40, "name": "Multiple Owners", "owner_steamids": ["76561198000000002", "76561198000000003"], "app_type": 1, "exclude_reason": 0},
+    {"appid": 50, "name": "Missing Entry", "owner_steamids": ["76561198000000002"], "app_type": 1, "exclude_reason": 0},
+    {"appid": 60, "name": "中文遊戲・日本語 🎮", "owner_steamids": ["76561198000000001", "76561198000000003"], "app_type": 1, "exclude_reason": 0},
+    {"appid": 70, "name": "Excluded Shared", "owner_steamids": ["76561198000000002"], "app_type": 1, "exclude_reason": 1},
+    {"appid": 80, "name": "Own Non-shareable", "owner_steamids": ["76561198000000001"], "app_type": 1, "exclude_reason": 1},
+    {"appid": 90, "name": "Software", "owner_steamids": ["76561198000000001"], "app_type": 2, "exclude_reason": 0}
+  ]}},
+  "summary": {"response": {
+    "entries": [
+      {"steamid": "76561198000000001", "appid": 10, "first_played": 1700000000, "latest_played": 1700003600, "seconds_played": 7200},
+      {"steamid": "76561198000000001", "appid": 20, "first_played": 1700000000, "latest_played": 1700500000, "seconds_played": 313200},
+      {"steamid": "76561198000000002", "appid": 20, "seconds_played": 999999},
+      {"steamid": "76561198000000001", "appid": 30, "first_played": 0, "latest_played": 0, "seconds_played": 0},
+      {"steamid": "76561198000000001", "appid": 40, "seconds_played": 3601},
+      {"steamid": "76561198000000003", "appid": 40, "seconds_played": 123456},
+      {"steamid": "76561198000000001", "appid": 60, "seconds_played": 60}
+    ],
+    "entries_by_owner": [{"steamid": "76561198000000001", "appid": 20, "seconds_played": 8000000}, {"steamid": "76561198000000001", "appid": 50, "seconds_played": 9000000}]
+  }}
+}
