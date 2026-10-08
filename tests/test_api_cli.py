@@ -105,9 +105,12 @@ class APIAndSecurityTests(unittest.TestCase):
 
     def test_cli_end_to_end_with_mocked_steam(self):
         fixture = json.loads((Path(__file__).parent / "fixtures/family.json").read_text())
-        bodies = {"GetFamilyGroupForUser": fixture["group"], "GetSharedLibraryApps": fixture["library"], "GetPlaytimeSummary": fixture["summary"], "ClientGetLastPlayedTimes": {"response": {}}}
+        bodies = {"GetFamilyGroupForUser": fixture["group"], "GetSharedLibraryApps": fixture["library"], "GetPlaytimeSummary": fixture["summary"], "ClientGetLastPlayedTimes": {"response": {}}, "GetItems": {"response": {"store_items": [{"appid": 20, "success": 1, "reviews": {"summary_filtered": {"review_count": 1000, "percent_positive": 85, "review_score_label": "極度好評"}}}]}}}
         def handler(request):
             method = request.url.path.split("/")[2]
+            if method == "GetItems":
+                self.assertNotIn("access_token", request.url.params)
+                self.assertTrue(json.loads(request.url.params["input_json"])["data_request"]["include_reviews"])
             return httpx.Response(200, json=bodies[method])
         real_client = httpx.Client
         def client_factory(**kwargs):
@@ -119,8 +122,11 @@ class APIAndSecurityTests(unittest.TestCase):
             output = json.loads((root / "steam_family_library.json").read_text())
             game = next(row for row in output["games"] if row["appid"] == 20)
             self.assertEqual(game["my_playtime_hours"], 87)
+            self.assertFalse(game["owned_by_me"])
+            self.assertEqual(game["review_positive_percent"], 85)
+            self.assertEqual(game["review_description"], "極度好評")
             self.assertEqual(output["metadata"]["my_steamid"], MY_ID)
-            self.assertEqual(len(list((root / "data/raw").glob("*/*.json"))), 4)
+            self.assertEqual(len(list((root / "data/raw").glob("*/*.json"))), 5)
             for path in root.rglob("*.json"):
                 self.assertNotIn(token, path.read_text())
 

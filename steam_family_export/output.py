@@ -52,6 +52,7 @@ def write_exports(output_dir: Path, rows: list[dict[str, Any]], metadata: dict[s
         "appid", "game_name", "owned_by_me", "family_owned", "owner_steamids",
         "my_playtime_minutes", "my_playtime_hours", "first_played", "last_played",
         "playtime_steamid", "my_playtime_seconds", "playtime_source", "playtime_scope", "exclude_reason",
+        "review_positive_percent", "review_description", "review_count", "review_checked_at", "review_status",
     ]
     stream = io.StringIO(newline="")
     writer = csv.DictWriter(stream, fieldnames=fields)
@@ -64,3 +65,36 @@ def write_exports(output_dir: Path, rows: list[dict[str, Any]], metadata: dict[s
         writer.writerow(csv_row)
     private_write(output_dir / "steam_family_library.csv", stream.getvalue())
     save_json(output_dir / "steam_family_library.json", {"metadata": metadata, "games": safe_rows}, token)
+
+
+def write_wishlist_exports(
+    output_dir: Path, rows: list[dict[str, Any]], metadata: dict[str, Any], token: str,
+) -> None:
+    safe_rows = redact(rows, token)
+    fields = [
+        "appid", "game_name", "priority", "date_added", "date_added_unix",
+        "wishlist_steamid", "store_url",
+        "review_positive_percent", "review_description", "review_count", "review_checked_at", "review_status",
+    ]
+    stream = io.StringIO(newline="")
+    writer = csv.DictWriter(stream, fieldnames=fields)
+    writer.writeheader()
+    writer.writerows(safe_rows)
+    private_write(output_dir / "steam_wishlist.csv", stream.getvalue())
+    save_json(output_dir / "steam_wishlist.json", {"metadata": metadata, "items": safe_rows}, token)
+
+
+def write_wishlist_prices(output_dir: Path, rows: list[dict[str, Any]], token: str) -> None:
+    fields = [
+        "appid", "game_name", "priority", "date_added", "date_added_unix",
+        "wishlist_steamid", "store_url", "original_price", "current_price",
+        "discount_percent", "currency", "country_code", "price_checked_at",
+        "price_status", "purchase_option_name", "packageid", "bundleid",
+        "formatted_original_price", "formatted_current_price",
+        "review_positive_percent", "review_description", "review_count", "review_checked_at", "review_status",
+    ]
+    stream = io.StringIO(newline="")
+    writer = csv.DictWriter(stream, fieldnames=fields)
+    writer.writeheader()
+    writer.writerows(redact(rows, token))
+    private_write(output_dir / "steam_wishlist_prices.csv", stream.getvalue())

@@ -119,3 +119,69 @@ response：`games[]`，各 entry 有 `appid`、`playtime_forever`、`first_playt
 官方 documented 的是一般 Web API 說明與 [IPlayerService/GetOwnedGames](https://partner.steamgames.com/doc/webapi/IPlayerService)。本工具使用的四個方法與 Store token configuration route 均没有公開支援契約，应视为 undocumented。SteamDatabase 是 Valve 協定的追蹤来源，Lutris 是實作者自己的整合源码，兩者均不能代表 Valve 官方保證。
 
 本機安全與 correctness 驗證通过 unittest/mock 完成。使用者在本機第一次執行時才会取得真正登入後的 raw schema；工具提供身份交叉檢查、明確 schema error 与未知時間標示。不要为了研究將 token 或原始私密資料傳回聊天。
+
+
+## 願望清單功能補充
+
+2026-10-08 新增願望清單模式。查閱現行 [Wishlist Web UI 協定](https://raw.githubusercontent.com/SteamDatabase/Protobufs/master/webui/service_wishlist.proto)、[StoreBrowse 協定](https://raw.githubusercontent.com/SteamDatabase/Protobufs/master/webui/service_storebrowse.proto) 與 [共用 StoreItem 定義](https://raw.githubusercontent.com/SteamDatabase/Protobufs/master/webui/common.proto)。這些是 Valve 協定的追蹤副本，並非官方穩定 API 契約。
+
+- `IWishlistService/GetWishlist/v1/`：GET，`input_json={"steamid":"本人SteamID64"}`。metadata 為 `bConstMethod=true, ePrivilege=2, eWebAPIKeyRequirement=1`。回應 `response.items[]` 只有 `appid`、`priority`、`date_added`，沒有遊戲名稱，也沒有 request 分頁欄位。
+- `IStoreBrowseService/GetItems/v1/`：GET，`input_json` 含 `ids:[{"appid":...}]`、`context:{"language":"tchinese","country_code":"TW"}`、`data_request:{"include_all_purchase_options":true}`。metadata 為 `bConstMethod=true, ePrivilege=1, eWebAPIKeyRequirement=1`。回應 `response.store_items[]`，本工具讀取 app 類型、appid／id、success、name，每批查詢 50 筆（本工具的批次大小，不宣稱是官方上限）。
+
+GetWishlist 沿用使用者本機提供的 `access_token`；GetItems 名稱查詢使用匿名 request，不傳送 token。兩者都不讀取 cookie，也不使用 developer key。公開清單可不需登入，私人清單是否能由該網頁 token 讀取取決於服務權限；本工具不要求更改為公開，遇到拒絕會報錯。
+
+當天 06:28 UTC（台北 14:28）使用測試 ID `76561198000000001`，分別以直接 `steamid` query 與 `input_json` 呼叫 GetWishlist，兩者都回 HTTP 200、`X-EResult: 15`、`{"response":{}}`。這證明兩種格式可抵達服務，但 **不代表已成功讀取清單**；client 必須判斷 EResult，不能將拒絕當成空清單。以 account ID 為零的 `76561197960265728` 探測時回 HTTP 400、Missing required routing parameter，不使用該無效帳號作為可用性證據。
+
+初次 GetItems 探測省略 `context.country_code`，回 `{"response":{}}`，不能據此判斷需要登入。後續以公開 appid 570 實際對照：省略國家代碼時 HTTP 200、`X-EResult: 8`；補上 `country_code: "TW"` 後，匿名 request 回 HTTP 200、`X-EResult: 1`，成功取得 `store_items` 及名稱 `Dota 2`。因此程式現已必須帶商店國家代碼，預設 TW，並以匿名方式查名稱。私人願望清單的登入後讀取仍未由開發測試直接使用使用者 credential 驗證。未使用已移除／過時的 `/wishlist/profiles/.../wishlistdata` route。
+
+
+## 願望清單價格補充
+
+2026-10-08 新增独立價格 CSV，沿用 [StoreBrowse Web UI 協定](https://raw.githubusercontent.com/SteamDatabase/Protobufs/master/webui/service_storebrowse.proto) 與 [StoreItem／PurchaseOption 定義](https://raw.githubusercontent.com/SteamDatabase/Protobufs/master/webui/common.proto)。
+
+GetItems 的 `data_request.include_all_purchase_options=true` 回傳購買方案。本工具只採 `best_purchase_option`，欄位為 `original_price_in_cents`、`final_price_in_cents`、`discount_pct`、原始格式化價格與 packageid／bundleid，不使用 purchase_options 中最低價。其 int64 在實際 JSON 回應為字串，換算時除以 100。
+
+增加匿名 GET `IStoreBrowseService/GetPriceStops/v1/`，`input_json={"country_code":"TW"}`；response 的 `currency_code` 為幣別來源。Web metadata 為 `bConstMethod=true, ePrivilege=0, eWebAPIKeyRequirement=1`。不使用 token、cookie 或 developer key。
+
+當天 07:00 UTC（台北 15:00）以公開 appid 620 和 570 實際探測台灣商店：GetItems 回傳 Portal 2 主要 package 7877，原價字串 18800、售價字串 3700、折扣 80，格式化售價 NT$ 37.00；Dota 2 回 is_free=true。GetPriceStops 回 HTTP 200、X-EResult 1、currency_code=TWD，formatted_amount 與 amount_in_cents 也確認 100 倍單位。以上價格只代表該次探測，不是固定價格。
+
+另以本機既有願望清單進行匿名價格查詢，確認價格欄位能實際匯出；沒有讀取或要求使用者 token。單元測試涵蓋折扣、無折扣、明確免費、暫時免費、無價格、預購、幣別失敗、錯誤 schema、其他 DLC 低價混淆、UTF-8 與獨立 CSV。
+
+## 評價資料（2026-10-08 匿名實測）
+
+程式使用既有的 `IStoreBrowseService/GetItems/v1/` GET，加入 `data_request.include_reviews=true`；每批最多 50 個 appid，透過 query `input_json` 傳入：
+
+```json
+{
+  "ids": [{"appid": 1527950}],
+  "context": {"language": "tchinese", "country_code": "TW"},
+  "data_request": {"include_reviews": true}
+}
+```
+
+此 endpoint 的 `include_reviews` 與 schema 仍屬未正式文件化的商店介面。正式 host 上不帶 token/key/cookie 的請求實際得到 HTTP 200、X-EResult 1。成功的 app 位於 `response.store_items[]`，評價：
+
+```json
+{
+  "reviews": {
+    "summary_filtered": {
+      "review_count": 32371,
+      "percent_positive": 85,
+      "review_score": 8,
+      "review_score_label": "極度好評"
+    },
+    "summary_language_specific": {
+      "review_count": 329,
+      "percent_positive": 81,
+      "review_score": 8,
+      "review_score_label": "極度好評"
+    }
+  }
+}
+```
+
+上例為當次 Wartales 的實際回應；數字會變。程式只用 `summary_filtered` 的百分比、描述與評論數，避免把繁體中文評論樣本誤當全語言整體評價。API 百分比已是整數，不重新推算或憑百分比自行套評價門檻。失敗 app 可回傳 `success=15, appid=0`，應忽略失敗 item，並以原本請求 appid 保留缺值列，不能把 appid 0 當成功資料。
+
+研究時另查閱 [Valve 官方 IUserReviewsService 文件](https://partner.steamgames.com/doc/webapi/IUserReviewsService)：2026 年文件將舊 `store.steampowered.com/appreviews/<appid>?json=1` 標為 deprecated，改用 `IUserReviewsService/GetAppReviews/v1/`，參數為 `input_json`、數字 enum、`languages` 陣列與 `display_language`。以 `languages=["all"]`、`review_type=0`、`purchase_type=0`、`display_language="tchinese"` 匿名請求也實際成功，包含 `query_summary` 與中文 `review_score_desc`。`num_per_page=0` 實測仍回傳 20 則評論；本工具不使用此途徑，也不下載／保存評論作者的 SteamID 或評論內文。商店批次 summaries 更適合數百款遊戲的 CSV 匯出。
+
+Valve 正式文件承諾的是 IUserReviewsService，不能把它的文件化狀態套用到程式採用的 StoreBrowse 欄位；兩者可能有快取／查詢篩選差異，評論數不保證完全一致。

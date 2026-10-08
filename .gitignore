@@ -13,3 +13,6 @@ steam_family_library.json
 dist/
 *.egg-info/
 .idea/
+steam_wishlist.csv
+steam_wishlist.json
+steam_wishlist_prices.csv

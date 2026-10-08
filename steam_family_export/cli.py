@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import getpass
 import logging
 import os
+import re
 from pathlib import Path
 import sys
 import uuid
@@ -15,17 +16,42 @@ from .auth import token_identity
 from .errors import ExportError
 from .output import redact, save_json, write_exports
 from .transform import transform_library
+from .wishlist import export_wishlist
+from .reviews import REVIEW_SCOPE, fetch_reviews, refresh_exports
+
+
+def country_code(value: str) -> str:
+    result = value.upper()
+    if not re.fullmatch(r"[A-Z]{2}", result):
+        raise argparse.ArgumentTypeError("國家代碼必須是兩個英文字母，例如 TW 或 US。")
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="匯出 Steam Family 遊戲及本人遊玩時間（不讀取瀏覽器資料）。")
+    parser = argparse.ArgumentParser(description="匯出 Steam Family 遊戲與本人遊玩時間，或本人願望清單（不讀取瀏覽器資料）。")
     parser.add_argument("--output-dir", type=Path, default=Path("."), help="CSV/JSON 輸出位置，預設目前目錄")
     parser.add_argument("--language", default="tchinese", help="Steam 遊戲名稱語言，預設 tchinese")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--wishlist", action="store_true", help="改為匯出本人願望清單（不需加入 Steam Family）")
+    modes.add_argument("--refresh-reviews", action="store_true", help="只更新現有 CSV/JSON 的整體評價，不需要 token")
+    parser.add_argument("--country-code", type=country_code, default="TW", help="願望清單商店名稱與價格查詢的國家代碼，預設 TW")
     args = parser.parse_args(argv)
     # httpx INFO messages include full URLs. Explicitly silence HTTP libraries.
     for logger in ("httpx", "httpcore"):
         logging.getLogger(logger).disabled = True
     try:
+        if args.refresh_reviews:
+            raw_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-reviews-" + uuid.uuid4().hex[:8]
+            with httpx.Client(timeout=30.0, follow_redirects=False, trust_env=False) as client:
+                api = SteamAPI("", client)
+
+                def fetch_public(method: str, body: dict[str, Any], raw_name: str | None = None) -> dict[str, Any]:
+                    payload = api.call(method, body)
+                    save_json(args.output_dir / "data/raw" / raw_id / ((raw_name or method) + ".json"), payload, "")
+                    return payload
+
+                refresh_exports(args.output_dir, fetch_public, args.language, args.country_code)
+            return 0
         token = os.environ.get("STEAM_WEBAPI_TOKEN", "").strip()
         if not token:
             if not sys.stdin.isatty():
@@ -38,11 +64,18 @@ def main(argv: list[str] | None = None) -> int:
         with httpx.Client(timeout=30.0, follow_redirects=False, trust_env=False) as client:
             api = SteamAPI(token, client)
 
-            def fetch(method: str, body: dict[str, Any]) -> dict[str, Any]:
+            def fetch(method: str, body: dict[str, Any], raw_name: str | None = None) -> dict[str, Any]:
                 # Persist response body only: no URL, request, cookie or headers.
                 payload = redact(api.call(method, body), token)
-                save_json(raw_dir / (method + ".json"), payload, token)
+                save_json(raw_dir / ((raw_name or method) + ".json"), payload, token)
                 return payload
+
+            if args.wishlist:
+                export_wishlist(
+                    fetch, my_id, args.language, args.output_dir, token,
+                    now.isoformat().replace("+00:00", "Z"), run_id, args.country_code,
+                )
+                return 0
 
             group = fetch("GetFamilyGroupForUser", {"include_family_group_response": True})
             group_id = family_id(group)
@@ -63,13 +96,17 @@ def main(argv: list[str] | None = None) -> int:
             except ExportError as exc:
                 player_times_error = str(exc)
                 print(f"注意：本人終生時間 API 無法取得；改用家庭玩家紀錄。{exc}", file=sys.stderr)
-        rows = transform_library(library, summary, my_id, player_times)
+            rows = transform_library(library, summary, my_id, player_times)
+            reviews = fetch_reviews([row["appid"] for row in rows], fetch, args.language, args.country_code)
+            for row in rows:
+                row.update(reviews[row["appid"]])
         unknown = sum(row["my_playtime_seconds"] is None for row in rows)
         metadata = {
             "my_steamid": my_id,
             "family_groupid": group_id,
             "exported_at": now.isoformat().replace("+00:00", "Z"),
             "raw_run": run_id,
+            "review_scope": REVIEW_SCOPE,
             "game_count": len(rows),
             "missing_player_entry_count": unknown,
             "playtime_attribution": "self-scoped ClientGetLastPlayedTimes, then GetPlaytimeSummary.entries filtered by steamid == my_steamid; entries_by_owner ignored",

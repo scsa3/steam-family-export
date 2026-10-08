@@ -108,3 +108,80 @@ docs/api-research.md
 pyproject.toml
 uv.lock
 ```
+
+
+## 願望清單模式
+
+```zsh
+uv run python -m steam_family_export --wishlist
+```
+
+`--wishlist` 改為匯出本人願望清單，不會呼叫 Family API；原本沒有旗標的家庭匯出流程維持相同。沿用隱藏輸入或 `STEAM_WEBAPI_TOKEN`，本人 SteamID 由同一個 token 取得；`MY_STEAM_ID` 仍可選用交叉檢查。
+
+使用 `IWishlistService/GetWishlist/v1/` 取得完整 `items`，以 `IStoreBrowseService/GetItems/v1/` 每批最多 50 個 appid 匿名查詢名稱；名稱與價格 request 不傳送 token。`--language` 與 `--output-dir` 同樣適用；商店查詢必須帶國家代碼，預設 `TW`，可用 `--country-code US` 改為其他商店區域。此參數不會更改你的 Steam 帳號地區。這些 API 屬於 unofficial API，格式與未登入探測結果見 [研究紀錄](api-research.md#願望清單功能補充)。
+
+輸出 `steam_wishlist.csv` 與 `steam_wishlist.json`，不覆寫家庭匯出檔。JSON 包含 `metadata` 與 `items`；各項目欄位如下：
+
+| 欄位 | 說明 |
+| --- | --- |
+| `appid` | Steam app ID |
+| `game_name` | 商店回傳的名稱；未知為 null／CSV 空白 |
+| `priority` | Steam 回傳的排序值，保留原值 |
+| `date_added` | 加入願望清單日期，UTC ISO 8601；零或未知為 null |
+| `date_added_unix` | 原始 Unix 秒數，未知預設 0 |
+| `wishlist_steamid` | 此次查詢的本人 SteamID |
+| `store_url` | 該 appid 的 Steam 商店連結 |
+
+按非零 priority 升冪輸出，0 排在後面；同順位依 appid 排序。商店名稱查詢失敗或項目下架時保留 appid，不會刪除願望清單項目。HTTP／限流失敗會停止繼續查詢名稱並顯示警告，JSON `missing_name_count` 與 `name_lookup_errors` 記錄結果。schema 變更則停止匯出，避免錯誤解讀資料。
+
+成功取得的 wishlist 與各批商店 JSON 回應分別存到 `data/raw/<本次識別碼>/GetWishlist.json`、`GetItems_wishlist_0001.json` 等檔案，套用相同 credential 遮蔽與 0600 檔案權限。願望清單輸出也已加入 `.gitignore`。
+
+空願望清單會產生只有標頭的 CSV 與 `items: []` JSON。私人清單或權限不足的 HTTP／EResult 會明確報錯，不當成空清單；請確認 token 所屬帳號與隱私設定，不需要把 token 傳回聊天。
+
+
+## 獨立願望清單價格 CSV
+
+執行相同的 `--wishlist` 指令，會另外產生 `steam_wishlist_prices.csv`。原本願望清單 CSV／JSON 的各項目欄位不加入價格；價格檔包含原本欄位，再增加以下欄位：
+
+| 欄位 | 說明 |
+| --- | --- |
+| `original_price` | Steam 主要購買方案原價，使用幣別單位，固定兩位小數 |
+| `current_price` | 同一方案目前售價 |
+| `discount_percent` | API 回傳的折扣百分比；要求隱藏時留空 |
+| `currency` | GetPriceStops 回傳的幣別，例如 TWD；不從貨幣符號猜測 |
+| `country_code` | 實際商店查詢地區，預設 TW |
+| `price_checked_at` | 該批查詢完成的 UTC ISO 8601 時間；未查詢項目留空 |
+| `price_status` | priced／free／no_price／unavailable／lookup_failed／currency_unknown |
+| `purchase_option_name` | Steam 選出的主要購買方案名稱 |
+| `packageid`、`bundleid` | 對應方案 ID；不適用時留空 |
+| `formatted_original_price`、`formatted_current_price` | Steam 原始格式化價格文字，方便核對 |
+
+例如要查美國商店：
+
+```zsh
+uv run python -m steam_family_export --wishlist --country-code US --language english
+```
+
+商店 API 的數值單位為百分之一幣別單位，原始 int64 JSON 可能是字串。本工具使用 Decimal 除以 100，避免浮點換算誤差。採 `best_purchase_option`，不從所有購買方案挑最低價，因為候選清單可能包括其他版本、套裝或不同 DLC。方案名稱及 ID 隨價格附上；實際登入結帳價格仍可能受已擁有遊戲的套裝折扣影響。
+
+明確免費且不是暫時免費的項目可輸出 0.00。未發售且沒有預購價格、下架、地區無法取得價格等情況留空；有預購價格的未發售遊戲仍可輸出價格。幣別查詢失敗時不猜測幣別或輸出沒有幣別的數字，並以 currency_unknown 標示。
+
+原價欄位缺失時不以售價代替。每款保留一列；沒價格不會被排除。價格是當次查詢的快照，會隨折扣與區域變動。獨立價格 CSV 採 UTF-8、0600 權限並已加入 `.gitignore`；GetPriceStops 和各批 GetItems 回應保存到當次 raw 目錄。
+
+## 整體評價
+
+正常匯出遊戲庫或願望清單會自動附帶評價。願望清單沿用原本的商店批次查詢；遊戲庫另以每批 50 個 appid 查詢公開商店資料，不送 token。
+
+`uv run python -m steam_family_export --refresh-reviews` 在 `--output-dir`（預設目前目錄）尋找已有的三份 CSV 與兩份 JSON，只更新評價欄位。此模式不要求登入、不讀取 token 環境變數，也不更新原本的價格、時數或擁有資料。
+
+| 欄位 | 意義 |
+| --- | --- |
+| `review_positive_percent` | Steam 回傳的整數百分比 0–100，例如 85 表示 85%；不是 0–1 比率 |
+| `review_description` | Steam 的評價描述，例如「極度好評」；依 `--language` 決定描述語言 |
+| `review_count` | 整體評價樣本數；沒有可用資料時留空 |
+| `review_checked_at` | 此批評價實際查詢的 UTC 時間 |
+| `review_status` | `available`、`no_reviews`、`unavailable` 或 `lookup_failed` |
+
+取 `reviews.summary_filtered`，不使用 `summary_language_specific`，也不是最近 30 天評價。統計受到 Steam 商店評價篩選規則影響，與不帶篩選的所有評論可能不同。Steam 的描述同時考慮樣本數，程式不自行只按百分比猜「極度好評」或「壓倒性好評」。無評論的百分比留空；有評論但正面比例為 0% 則保留數值 0。JSON 使用 `null` 表示空值。
+
+HTTP 或限流失敗會停止後續批次，保留全部遊戲並標成 `lookup_failed`，不把缺資料當負評。API schema 不符會明確報錯。原始商店回應保存在該次 `data/raw/` 目錄，所有輸出檔仍使用 0600 權限並受 `.gitignore` 排除。

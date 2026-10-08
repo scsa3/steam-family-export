@@ -2,7 +2,7 @@
 
 # Steam Family library exporter
 
-Export your Steam Family library and your own playtime records to CSV and JSON. Requires Python 3.12+. You do not need to install the Steam Client.
+Export your Steam Family library, your own playtime records, or your wishlist to CSV and JSON. Requires Python 3.12+. You do not need to install the Steam Client.
 
 ## Getting started
 
@@ -18,6 +18,28 @@ uv run python -m steam_family_export
 Paste the token when prompted. Your input is hidden, and the tool automatically determines your SteamID.
 
 **Paste your token only into your own terminal. Never share it in chat, Git, or an issue.** The tool does not read browser cookies, Keychain entries, or passwords, and it does not save your token.
+
+## Export your wishlist
+
+Use the same token retrieval steps, then run:
+
+```sh
+uv run python -m steam_family_export --wishlist
+```
+
+This creates `steam_wishlist.csv` and `steam_wishlist.json` with app IDs, game names, priorities, dates added, and store links. This mode exports only your own wishlist and does not require Steam Family membership. Items are kept even when their names cannot be retrieved. A separate `steam_wishlist_prices.csv` records original and current prices, discounts, currency, store region, and query timestamps. It uses the Taiwan store by default and leaves unavailable prices blank.
+
+## Reviews
+
+Library, wishlist, and price CSVs include overall positive review percentage, the Steam review description, total review count, and query time. The overall summary covers all review languages. Descriptions default to Traditional Chinese; use `--language english` for English labels.
+
+Update reviews in existing exports without a token:
+
+```sh
+uv run python -m steam_family_export --refresh-reviews
+```
+
+Reviews are a snapshot. Missing reviews or unavailable data leave the percentage blank; see `review_status` for the reason.
 
 ## Output
 

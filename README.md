@@ -2,7 +2,7 @@
 
 # Steam Family library exporter
 
-匯出 Steam Family 遊戲庫及你本人的遊玩紀錄，產生 CSV 和 JSON。支援 Python 3.12+，不需要安裝 Steam Client。
+匯出 Steam Family 遊戲庫、你本人的遊玩紀錄或願望清單，產生 CSV 和 JSON。支援 Python 3.12+，不需要安裝 Steam Client。
 
 ## 開始使用
 
@@ -18,6 +18,28 @@ uv run python -m steam_family_export
 依程式提示貼上 token；輸入內容不會顯示。程式會自動取得你的 SteamID。
 
 **token 只貼到你自己的終端機，不要貼到聊天、Git 或 issue。** 本工具不讀取瀏覽器 cookie、Keychain 或密碼，也不保存 token。
+
+## 匯出願望清單
+
+使用相同的 token 取得方式，改執行：
+
+```zsh
+uv run python -m steam_family_export --wishlist
+```
+
+會產生 `steam_wishlist.csv` 和 `steam_wishlist.json`，包含 appid、遊戲名稱、排序、加入日期與商店連結。此模式只匯出本人願望清單，不需要加入 Steam Family。查不到名稱的項目仍會保留。另產生 `steam_wishlist_prices.csv`，記錄原價、售價、折扣、幣別、商店地區與查詢時間；預設查台灣商店，未知價格留空。
+
+## 評價
+
+遊戲庫、願望清單與價格 CSV 都會包含整體正面評價百分比、評價描述（例如「極度好評」）、評論總數與查詢時間。百分比採用 Steam 回傳的整體評價，包含所有評論語言；預設描述為繁體中文。
+
+已有匯出檔時，只更新評價、不需 token：
+
+```zsh
+uv run python -m steam_family_export --refresh-reviews
+```
+
+評價是查詢當下的快照。沒有評論或資料不可用時，百分比留空，原因見 `review_status`。
 
 ## 輸出
 
